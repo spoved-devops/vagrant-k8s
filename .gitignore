@@ -1,3 +1,4 @@
 .vagrant
 admin.conf
 join-token
+Vagrantfile
