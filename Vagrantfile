@@ -60,7 +60,7 @@ EOF
   echo
   echo "To use kubectl from your host, set the following env var (or use '--kubeconfig ./admin.conf'"
   echo 
-  echo '   KUBECONFIG=$(pwd)/admin.conf'
+  echo '   export KUBECONFIG=$(pwd)/admin.conf'
   echo
   echo "********************************************************************************************"
 SCRIPT
