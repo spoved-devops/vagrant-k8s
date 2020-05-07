@@ -74,7 +74,7 @@ Vagrant.configure("2") do |config|
   # Set hostname, image and network type
   config.vm.hostname = "k8s-master"
   config.vm.box = "bento/ubuntu-18.04"
-  config.vm.network "private_network", ip: "172.28.128.99"
+  config.vm.network "private_network", ip: "172.28.128.100"
   config.vm.define "k8s-master"
   
   # Install docker on the VM
