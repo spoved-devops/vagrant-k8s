@@ -1,0 +1,3 @@
+.vagrant
+admin.conf
+.vagrant/machines/k8s-test/virtualbox/action_provision
