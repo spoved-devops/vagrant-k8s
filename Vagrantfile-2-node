@@ -1,0 +1,130 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# This script to install Kubernetes will get executed after we have provisioned the box 
+$common_script = <<-COMMONSCRIPT
+
+  echo "********************************************************************************************"
+  echo "COMMON ACTIONS"
+  echo "********************************************************************************************"
+
+  # Update apt package list and install HTTPS transport
+  echo "*** Updating package list and installing apt-transport-https"
+  apt-get update && apt-get install -y apt-transport-https
+
+  # Get Google key for Kubernetes repo
+  echo "*** Adding Google apt key and repo"
+  curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+  cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+  deb http://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+  # Update apt package list to include Google packages
+  echo "*** Updating package list"
+  apt-get update
+
+  # Install kubelet, kubeadm and kubectl
+  echo "*** Installing kubelet, kubeadm and kubectl"
+  apt-get install -y kubelet kubeadm kubectl
+
+  # kubelet requires swap off
+  echo "*** Disabling swap"
+  swapoff -a
+
+  # keep swap off after reboot
+  sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+  # Add cgroup driver argument
+  echo "*** Adding cgroup arg..."
+  sed -i '0,/ExecStart=/s//Environment="KUBELET_EXTRA_ARGS=--cgroup-driver=cgroupfs"\\n&/' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+
+COMMONSCRIPT
+
+$master_script = <<-MASTERSCRIPT
+
+  echo "********************************************************************************************"
+  echo "MASTER ACTIONS"
+  echo "********************************************************************************************"
+
+
+  # Get the IP addresses that VirtualBox has given this VM
+  echo "*** Getting IP addresses"
+  INT_IPADDR=`ifconfig eth0 | grep "inet " | awk '{print $2}'`
+  EXT_IPADDR=`ifconfig eth1 | grep "inet " | awk '{print $2}'`
+
+  echo Internal IP $INT_IPADDR
+  echo External IP $EXT_IPADDR
+
+  # Set up Kubernetes
+  echo "*** Running kubeadm init"
+  kubeadm init --apiserver-cert-extra-sans=$EXT_IPADDR --node-name $(hostname -s) --apiserver-advertise-address=$EXT_IPADDR --pod-network-cidr=172.16.0.0/24 #--control-plane-endpoint $EXT_IPADDR
+
+  # Set up admin creds for the vagrant user
+  echo "*** Copying credentials to /home/vagrant and setting ownership"
+  sudo --user=vagrant mkdir -p /home/vagrant/.kube
+  cp -i /etc/kubernetes/admin.conf /home/vagrant/.kube/config
+  chown $(id -u vagrant):$(id -g vagrant) /home/vagrant/.kube/config
+
+  # Copy kubernetes admin.conf to shared /vagrant directory
+  echo "*** Copying credentials to /vagrant"
+  cp /etc/kubernetes/admin.conf /vagrant/
+
+  # Install a network
+  echo "*** Installing weave pod network"
+  kubectl --kubeconfig /vagrant/admin.conf apply -f https://cloud.weave.works/k8s/net?k8s-version=$(kubectl --kubeconfig /vagrant/admin.conf version | base64 | tr -d '\n')
+
+  # Remove the taint on the master
+  echo "*** Removing taint on master"
+  kubectl --kubeconfig /vagrant/admin.conf taint nodes --all node-role.kubernetes.io/master-
+
+  # Get the token required to join a worker to the cluster, write it to /vagrant/token
+  echo "*** Saving join token to /vagrant/join-token"
+  kubeadm token list -o yaml | grep token: | cut -d' ' -f2 > /vagrant/join-token
+
+MASTERSCRIPT
+
+$worker_script = <<-WORKERSCRIPT
+  echo "********************************************************************************************"
+  echo "WORKER ACTIONS"
+  echo "********************************************************************************************"
+
+  # Join the cluster
+  echo "*** Running kubeadm join"
+  kubeadm join 172.28.128.100:6443 --token $(cat /vagrant/join-token | tr -d '\n') --discovery-token-unsafe-skip-ca-verification
+
+  # Finally, echo the command to set up kubeconfig on the host machine
+  echo "********************************************************************************************"
+  echo ""
+  echo "To use kubectl from your host, set the following env var (or use '--kubeconfig ./admin.conf'"
+  echo ""
+  echo '   export KUBECONFIG=$(pwd)/admin.conf'
+  echo ""
+  echo "********************************************************************************************"
+
+WORKERSCRIPT
+
+
+Vagrant.configure("2") do |config|
+
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 2048
+    v.cpus = 2
+  end
+
+  config.vm.box = "bento/ubuntu-18.04"
+  config.vm.provision "docker"
+  config.vm.provision "shell", inline: $common_script
+
+  config.vm.define "master" do |master|
+    master.vm.hostname = "k8s-master"
+    master.vm.network "private_network", ip: "172.28.128.100"
+    master.vm.provision "shell", inline: $master_script
+  end
+
+  config.vm.define "worker" do |worker|
+    worker.vm.hostname = "k8s-worker"
+    worker.vm.network "private_network", ip: "172.28.128.101"
+    worker.vm.provision "shell", inline: $worker_script
+  end
+
+end
