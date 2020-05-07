@@ -29,22 +29,19 @@ EOF
   # Get the IP addresses that VirtualBox has given this VM
   INT_IPADDR=`ifconfig eth0 | grep "inet " | awk '{print $2}'`
   EXT_IPADDR=`ifconfig eth1 | grep "inet " | awk '{print $2}'`
-  #EXT_IPADDR="127.0.0.1"
 
   echo Internal IP $INT_IPADDR
   echo External IP $EXT_IPADDR
 
-  # Start and enable docker service
-  #systemctl enable docker.service
-  #systemctl start docker.service
-
   # Set up Kubernetes
   NODENAME=$(hostname -s)
   kubeadm init --apiserver-cert-extra-sans=$EXT_IPADDR --node-name $NODENAME  # --apiserver-advertise-address=$EXT_IPADDR
+
   # Set up admin creds for the vagrant user
   echo Copying credentials to /home/vagrant...
   sudo --user=vagrant mkdir -p /home/vagrant/.kube
   cp -i /etc/kubernetes/admin.conf /home/vagrant/.kube/config
+  chown $(id -u vagrant):$(id -g vagrant) /home/vagrant/.kube/config
 
   # Copy kubernetes admin.conf to shared /vagrant directory
   cp /etc/kubernetes/admin.conf /vagrant/
@@ -55,20 +52,17 @@ EOF
   # Remove the taint on the master
   kubectl --kubeconfig /vagrant/admin.conf taint nodes --all node-role.kubernetes.io/master-
 
-  # Replace internal IP with external IP 
+  # Replace internal IP with external IP in the config copied for use on the host
   sed -i -e "s/${INT_IPADDR}/${EXT_IPADDR}/" /vagrant/admin.conf
 
-  # Change ownership
-  chown $(id -u vagrant):$(id -g vagrant) /home/vagrant/.kube/config
-
-
   # Finally, echo the command to set up kubeconfig on the host machine
-  echo
+  echo "********************************************************************************************"
   echo
   echo "To use kubectl from your host, set the following env var (or use '--kubeconfig ./admin.conf'"
   echo 
   echo '   KUBECONFIG=$(pwd)/admin.conf'
   echo
+  echo "********************************************************************************************"
 SCRIPT
 
 Vagrant.configure("2") do |config|
@@ -81,14 +75,11 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "k8s-test1"
   config.vm.box = "bento/ubuntu-18.04"
   config.vm.network "private_network", ip: "172.28.128.99"
-  #config.vm.network "forwarded_port", guest: 6443, host: 6443
   config.vm.define "k8s-test"
   
   # Install docker on the VM
   config.vm.provision "docker"
-  
-  # Specify the shared folder mounted from the host if you like
-  # By default you get "." synced as "/vagrant"
-  # config.vm.synced_folder ".", "/folder"  
+
+  # Run the inline script  
   config.vm.provision "shell", inline: $script
 end
