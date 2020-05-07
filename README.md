@@ -1,6 +1,6 @@
 # Single-node Kubernetes "Cluster" 
 ## Created in Virtualbox by Vagrant
-A Vagranfile that can be used to create a single node Kubernetes cluster in a VirtualBox VM, accessible from your host.  Based on ```bento/ubuntu-18.04``` box.
+A Vagranfile that can be used to create a single node Kubernetes cluster in a VirtualBox VM, accessible from your host.  Based on the ```bento/ubuntu-18.04``` box.
 
 **Note: A static IP on a host-only network is specified in the Vagrantfile due to issues with the box not respecting DHCP IPs**
 
@@ -31,6 +31,8 @@ A Vagranfile that can be used to create a single node Kubernetes cluster in a Vi
 
 
 ### To Use:
+Ensure Vagrant and Virtualbox are installed.
+
 Install kubectl on your host if you want to be able to manage the cluster from outside your VM:
 
 ```bash
@@ -40,12 +42,14 @@ apt-get update
 apt-get install -y kubectl
 ```  
 
-CLone the repo and spin things up:
+Clone the repo and spin things up:
 
 ```bash
 git clone https://github.com/spoved-devops/vagrant-k8s.git
 vagrant up
 ```
+
+Export the KUBECONFIG environment variable shown as the final output from ```vagrant up```
 
 
 
