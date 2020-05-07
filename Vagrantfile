@@ -57,11 +57,11 @@ EOF
 
   # Finally, echo the command to set up kubeconfig on the host machine
   echo "********************************************************************************************"
-  echo
+  echo ""
   echo "To use kubectl from your host, set the following env var (or use '--kubeconfig ./admin.conf'"
-  echo 
+  echo ""
   echo '   export KUBECONFIG=$(pwd)/admin.conf'
-  echo
+  echo ""
   echo "********************************************************************************************"
 SCRIPT
 
