@@ -34,9 +34,10 @@ EOF
   # keep swap off after reboot
   sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 
-  # Add cgroup driver argument
-  echo "*** Adding cgroup arg..."
-  sed -i '0,/ExecStart=/s//Environment="KUBELET_EXTRA_ARGS=--cgroup-driver=cgroupfs"\\n&/' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+  # Add cgroup driver and node IP arguments for kubelet
+  echo "*** Adding cgroup and node IP args for kubelet..."
+  EXT_IPADDR=`ifconfig eth1 | grep "inet " | awk '{print $2}'`
+  sed -i "0,/ExecStart=/s//Environment=\\"KUBELET_EXTRA_ARGS=--node-ip=$EXT_IPADDR --cgroup-driver=cgroupfs\\"\\n&/" /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
 
 COMMONSCRIPT
 
@@ -46,18 +47,16 @@ $master_script = <<-MASTERSCRIPT
   echo "MASTER ACTIONS"
   echo "********************************************************************************************"
 
-
   # Get the IP addresses that VirtualBox has given this VM
   echo "*** Getting IP addresses"
-  INT_IPADDR=`ifconfig eth0 | grep "inet " | awk '{print $2}'`
   EXT_IPADDR=`ifconfig eth1 | grep "inet " | awk '{print $2}'`
 
-  echo Internal IP $INT_IPADDR
   echo External IP $EXT_IPADDR
+  echo $EXT_IPADDR > /vagrant/master-ip
 
   # Set up Kubernetes
   echo "*** Running kubeadm init"
-  kubeadm init --apiserver-cert-extra-sans=$EXT_IPADDR --node-name $(hostname -s) --apiserver-advertise-address=$EXT_IPADDR --pod-network-cidr=172.16.0.0/24 #--control-plane-endpoint $EXT_IPADDR
+  kubeadm init --node-name $(hostname -s) --apiserver-advertise-address=$EXT_IPADDR --pod-network-cidr=10.17.0.0/16 --service-cidr=10.18.0.0/24
 
   # Set up admin creds for the vagrant user
   echo "*** Copying credentials to /home/vagrant and setting ownership"
@@ -70,9 +69,9 @@ $master_script = <<-MASTERSCRIPT
   cp /etc/kubernetes/admin.conf /vagrant/
 
   # Install a network
-  echo "*** Installing weave pod network"
+  echo "*** Install weave pod network"
   kubectl --kubeconfig /vagrant/admin.conf apply -f https://cloud.weave.works/k8s/net?k8s-version=$(kubectl --kubeconfig /vagrant/admin.conf version | base64 | tr -d '\n')
-
+  
   # Remove the taint on the master
   echo "*** Removing taint on master"
   kubectl --kubeconfig /vagrant/admin.conf taint nodes --all node-role.kubernetes.io/master-
@@ -90,7 +89,7 @@ $worker_script = <<-WORKERSCRIPT
 
   # Join the cluster
   echo "*** Running kubeadm join"
-  kubeadm join 172.28.128.100:6443 --token $(cat /vagrant/join-token | tr -d '\n') --discovery-token-unsafe-skip-ca-verification
+  kubeadm join $(cat /vagrant/master-ip | tr -d '\n'):6443 --token $(cat /vagrant/join-token | tr -d '\n') --discovery-token-unsafe-skip-ca-verification
 
   # Finally, echo the command to set up kubeconfig on the host machine
   echo "********************************************************************************************"
@@ -114,16 +113,17 @@ Vagrant.configure("2") do |config|
   config.vm.box = "bento/ubuntu-18.04"
   config.vm.provision "docker"
   config.vm.provision "shell", inline: $common_script
+  config.vm.network "private_network", type: "dhcp"
 
   config.vm.define "master" do |master|
     master.vm.hostname = "k8s-master"
-    master.vm.network "private_network", ip: "172.28.128.100"
+    master.vm.define "k8s-master"
     master.vm.provision "shell", inline: $master_script
   end
 
   config.vm.define "worker" do |worker|
     worker.vm.hostname = "k8s-worker"
-    worker.vm.network "private_network", ip: "172.28.128.101"
+    worker.vm.define "k8s-worker"
     worker.vm.provision "shell", inline: $worker_script
   end
 

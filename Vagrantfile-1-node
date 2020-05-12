@@ -19,13 +19,6 @@ EOF
   # Install kubelet, kubeadm and kubectl
   apt-get install -y kubelet kubeadm kubectl
 
-  # kubelet requires swap off
-  swapoff -a
-
-  # keep swap off after reboot
-  sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
-  sed -i '0,/ExecStart=/s//Environment="KUBELET_EXTRA_ARGS=--cgroup-driver=cgroupfs"\\n&/' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-
   # Get the IP addresses that VirtualBox has given this VM
   INT_IPADDR=`ifconfig eth0 | grep "inet " | awk '{print $2}'`
   EXT_IPADDR=`ifconfig eth1 | grep "inet " | awk '{print $2}'`
@@ -33,9 +26,16 @@ EOF
   echo Internal IP $INT_IPADDR
   echo External IP $EXT_IPADDR
 
+  # kubelet requires swap off
+  swapoff -a
+
+  # keep swap off after reboot
+  sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+  sed -i "0,/ExecStart=/s//Environment=\\"KUBELET_EXTRA_ARGS=--node-ip=$EXT_IPADDR --cgroup-driver=cgroupfs\\"\\n&/" /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+
   # Set up Kubernetes
   NODENAME=$(hostname -s)
-  kubeadm init --apiserver-cert-extra-sans=$EXT_IPADDR --node-name $NODENAME  # --apiserver-advertise-address=$EXT_IPADDR
+  kubeadm init --apiserver-cert-extra-sans=$EXT_IPADDR --node-name $NODENAME  --apiserver-advertise-address=$EXT_IPADDR --pod-network-cidr=172.16.0.0/24
 
   # Set up admin creds for the vagrant user
   echo Copying credentials to /home/vagrant...
@@ -51,9 +51,6 @@ EOF
 
   # Remove the taint on the master
   kubectl --kubeconfig /vagrant/admin.conf taint nodes --all node-role.kubernetes.io/master-
-
-  # Replace internal IP with external IP in the config copied for use on the host
-  sed -i -e "s/${INT_IPADDR}/${EXT_IPADDR}/" /vagrant/admin.conf
 
   # Finally, echo the command to set up kubeconfig on the host machine
   echo "********************************************************************************************"
@@ -73,9 +70,9 @@ Vagrant.configure("2") do |config|
   
   # Set hostname, image and network type
   config.vm.hostname = "k8s-master"
-  config.vm.box = "bento/ubuntu-18.04"
-  config.vm.network "private_network", ip: "172.28.128.100"
   config.vm.define "k8s-master"
+  config.vm.box = "bento/ubuntu-18.04"
+  config.vm.network "private_network", type: "dhcp"
   
   # Install docker on the VM
   config.vm.provision "docker"
