@@ -1,5 +1,4 @@
 .vagrant
 admin.conf
 join-token
-Vagrantfile
 master-ip
