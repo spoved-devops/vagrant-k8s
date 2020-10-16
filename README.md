@@ -1,15 +1,13 @@
-# Single-node or dual-node Kubernetes "Cluster" 
-## Created in Virtualbox by Vagrant
-Two Vagrantfiles; one to create a single node cluster, the other to create a two node cluster.  Created in Virtualbox VM(s), with kubectl workable from your host.  Based on the ```bento/ubuntu-18.04``` box.
+# Multi-node Kubernetes Cluster
+Created by Vagrant as Virtualbox VMs, with kubectl workable from your host.  Based on the ```bento/ubuntu-18.04``` box.
 
 Docker is provisioned by Vagrant.  Inline scripts perform actions common to both master and worker, just the master, and just the worker.
 
 ### Actions
 * Vagrant:
   * Virtual Box private network created
-  * One or two Virtualbox VMs created, depending on Vagrantfile used:
-    * k8s-master
-    * Optionally, k8s-worker
+  * One master created
+  * Zero or more workers created
   * Current directory on the host mapped to /vagrant in the VM(s)
   * Docker provisioned
 * Inline scripts:
@@ -38,17 +36,15 @@ Ensure Vagrant and Virtualbox are installed.
 Install kubectl on your host if you want to be able to manage the cluster from outside your VM(s):
 
 ```bash
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-echo "deb http://apt.kubernetes.io/ kubernetes-xenial main" >> /etc/apt/sources.list.d/kubernetes.list
-apt-get update
-apt-get install -y kubectl
+curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+
 ```  
 
 Clone the repo and rename the preferred Vagrantfile:
 
 ```bash
 git clone https://github.com/spoved-devops/vagrant-k8s.git
-cp Vagrantfile-1-node Vagrantfile
 ```
 
 Spin things up:
@@ -62,13 +58,7 @@ Export the KUBECONFIG environment variable shown as the final output from ```vag
 export KUBECONFIG=$(pwd)/admin.conf
 ```
 
-The worker node may take a couple of minutes to become fully ready after joining the cluster.  Check with:
+The worker nodes may take a couple of minutes to become fully ready after joining the cluster.  Check with:
 ```bash
 kubectl get nodes
 ```
-
-## Notes:
-* Weave seems to be happier in this sort of setup than Flannel
-* An additional host-network IP is assigned to each VM on eth1, and it is this IP that is used at various points, **not** the NAT'd address on eth0
-* Occasionally the provisioning of docker-ce by Vagrant will fail, with one of a selection of potential errors all seemingly related to issues downloading either packages or verifying certificates
-* Sometimes apt-get files with a segmentation fault, not clear why
